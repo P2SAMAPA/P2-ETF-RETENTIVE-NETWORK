@@ -32,8 +32,8 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<h1 style="text-align: center;">🧠 Retentive Network (RetNet)</h1>', unsafe_allow_html=True)
-st.markdown('<p style="text-align: center;">Multi‑scale retention | O(1) inference | Successor to Transformers</p>', unsafe_allow_html=True)
+st.markdown('<h1 style="text-align: center;">🧠 Retentive Network (RetNet) with Momentum</h1>', unsafe_allow_html=True)
+st.markdown('<p style="text-align: center;">Multi‑scale retention | O(1) inference | Prediction × Momentum</p>', unsafe_allow_html=True)
 
 st.sidebar.markdown("## 🧮 RetNet")
 if st.sidebar.button("🔄 Refresh Data", use_container_width=True, type="primary"):
@@ -44,6 +44,7 @@ st.sidebar.markdown(f"**Run Date:** `{st.session_state.get('run_date', 'Not load
 st.sidebar.markdown(f"**Next Trading Day:** `{next_trading_day()}`")
 st.sidebar.markdown(f"**Hidden size:** {config.HIDDEN_SIZE} | **Heads:** {config.NUM_HEADS} | **Layers:** {config.NUM_LAYERS}")
 st.sidebar.markdown(f"**Seq len:** {config.SEQ_LEN} | **Epochs:** {config.EPOCHS}")
+st.sidebar.markdown(f"**Score = Prediction × (1 + Momentum)**")
 
 OUTPUT_REPO = config.OUTPUT_REPO
 HF_TOKEN = config.HF_TOKEN
@@ -98,26 +99,28 @@ def display_universe(universe_name, uni_data, window_data, window_label):
             st.markdown(f"""
             <div class="hero-card">
                 <h3>{etf['ticker']}</h3>
-                <p>RetNet score: {etf['retnet_score_norm']:.3f}</p>
+                <p>RetNet×Momentum: {etf['retnet_score_norm']:.3f}</p>
                 <p style="font-size:0.9rem;">raw: {etf['raw_score']:.4f}</p>
             </div>
             """, unsafe_allow_html=True)
     with st.expander(f"Full ranking for {universe_name}"):
-        df_full = pd.DataFrame(list(norm_scores.items()), columns=["Ticker", "Normalized RetNet Score"])
+        df_full = pd.DataFrame(list(norm_scores.items()), columns=["Ticker", "Normalized Score"])
         df_full["Raw Score"] = df_full["Ticker"].apply(lambda t: raw_scores[t])
-        df_full = df_full.sort_values("Normalized RetNet Score", ascending=False)
+        df_full = df_full.sort_values("Normalized Score", ascending=False)
         st.dataframe(df_full, use_container_width=True)
 
 tab1, tab2 = st.tabs(["📊 Best Window (Auto)", "🔍 Choose Window (Manual)"])
 
 with tab1:
-    st.header("🧠 Top ETFs by RetNet Prediction (Auto Best Window)")
+    st.header("🧠 Top ETFs by RetNet × Momentum (Auto Best Window)")
     with st.expander("📖 Interpretation", expanded=False):
         st.markdown("""
         - **Retentive Network (RetNet)** is a successor to Transformers with O(1) inference complexity.
         - **Multi‑scale retention** replaces attention with a chunk‑wise recurrent formulation.
         - The model learns from sequences of ETF returns and macro variables to predict next‑day return.
-        - Higher score → stronger predicted upward move.
+        - **Momentum factor:** 1 + last_return (clipped to 0.5–2.0).
+        - **Final score = RetNet prediction × momentum** – up‑weights predicted upward moves with positive momentum.
+        - Higher score → stronger expected upward move with momentum confirmation.
         """)
     for universe_name, uni_data in data["universes"].items():
         if not uni_data or not uni_data.get("all_windows"):
@@ -150,4 +153,4 @@ with tab2:
             st.warning("No data for selected window.")
 
 st.sidebar.markdown("---")
-st.sidebar.caption("Retentive Network | O(1) inference with multi‑scale retention")
+st.sidebar.caption("Retentive Network | O(1) inference with multi‑scale retention × momentum")
