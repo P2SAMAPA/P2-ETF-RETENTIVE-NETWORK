@@ -85,6 +85,8 @@ class RetNet(nn.Module):
 def prepare_data(returns, macro_df, seq_len=10):
     """
     Prepare sequences for training.
+    returns: pandas Series (single ETF)
+    macro_df: pandas DataFrame (macro variables)
     """
     if len(returns) < seq_len + 1:
         return None, None
@@ -95,11 +97,11 @@ def prepare_data(returns, macro_df, seq_len=10):
     # Create sequences
     X, y = [], []
     for i in range(seq_len, len(ret_aligned)):
-        # Features: lagged returns + lagged macro (flattened)
-        ret_seq = ret_aligned.iloc[i-seq_len:i].values
-        macro_seq = macro_aligned.iloc[i-seq_len:i].values
-        # Flatten into a single vector per time step (features = returns + macro)
-        seq_features = np.concatenate([ret_seq, macro_seq], axis=1)
+        # Features: lagged returns + lagged macro
+        ret_seq = ret_aligned.iloc[i-seq_len:i].values.reshape(-1, 1)  # (seq_len, 1)
+        macro_seq = macro_aligned.iloc[i-seq_len:i].values              # (seq_len, n_macros)
+        # Concatenate along feature dimension
+        seq_features = np.concatenate([ret_seq, macro_seq], axis=1)      # (seq_len, 1 + n_macros)
         X.append(seq_features)
         y.append(ret_aligned.iloc[i])
     X = np.array(X, dtype=np.float32)
@@ -136,7 +138,9 @@ def retnet_score(returns, macro_df, hidden_size=64, num_heads=4, num_layers=2, d
     model.eval()
     with torch.no_grad():
         # Use the last sequence (most recent seq_len days)
-        last_seq = np.concatenate([returns.iloc[-seq_len:].values, macro_df.iloc[-seq_len:].values], axis=1)
+        ret_seq = returns.iloc[-seq_len:].values.reshape(-1, 1)
+        macro_seq = macro_df.iloc[-seq_len:].values
+        last_seq = np.concatenate([ret_seq, macro_seq], axis=1)
         last_seq = torch.tensor(last_seq, dtype=torch.float32).unsqueeze(0).to(device)
         pred = model(last_seq).item()
     return float(pred)
