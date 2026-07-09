@@ -100,7 +100,6 @@ def prepare_data(returns, macro_df, seq_len=10):
         # Features: lagged returns + lagged macro
         ret_seq = ret_aligned.iloc[i-seq_len:i].values.reshape(-1, 1)  # (seq_len, 1)
         macro_seq = macro_aligned.iloc[i-seq_len:i].values              # (seq_len, n_macros)
-        # Concatenate along feature dimension
         seq_features = np.concatenate([ret_seq, macro_seq], axis=1)      # (seq_len, 1 + n_macros)
         X.append(seq_features)
         y.append(ret_aligned.iloc[i])
@@ -110,7 +109,8 @@ def prepare_data(returns, macro_df, seq_len=10):
 
 def retnet_score(returns, macro_df, hidden_size=64, num_heads=4, num_layers=2, dropout=0.1, seq_len=10, epochs=30, lr=0.001, batch_size=16):
     """
-    Train RetNet and return predicted next-day return.
+    Train RetNet and return predicted next-day return with momentum enhancement.
+    Final score = RetNet prediction × (1 + last_return)
     """
     X, y = prepare_data(returns, macro_df, seq_len)
     if X is None or len(X) < batch_size:
@@ -143,4 +143,10 @@ def retnet_score(returns, macro_df, hidden_size=64, num_heads=4, num_layers=2, d
         last_seq = np.concatenate([ret_seq, macro_seq], axis=1)
         last_seq = torch.tensor(last_seq, dtype=torch.float32).unsqueeze(0).to(device)
         pred = model(last_seq).item()
-    return float(pred)
+    # Momentum factor: 1 + last_return (clipped to [0.5, 2.0])
+    last_return = returns.iloc[-1]
+    momentum = 1.0 + last_return
+    momentum = max(0.5, min(2.0, momentum))
+    # Final score = RetNet prediction × momentum
+    final_score = pred * momentum
+    return float(final_score)
